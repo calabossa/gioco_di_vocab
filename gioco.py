@@ -122,7 +122,7 @@ def pick_any_card(df, base_llm):
 
 
 def build_question(card: dict) -> str:
-    prefix = "⭐ NEW WORD " if card.get("is_generated") else ""
+    prefix = "⭐ NEW WORD: " if card.get("is_generated") else ""
     if card["direction_it_to_other"]:
         # Show Italian, ask for translation
         return f"{prefix}Translate from Italian: **{card['italian']}**"
