@@ -51,7 +51,7 @@ class NewWordCard(BaseModel):
     italian: str
     translation: str
 
-def generate_new_word_card(llm) -> dict:
+def generate_new_word_card(llm, df) -> dict:
     """
     Ask the LLM to invent one new intermediate-level Italian word with translation.
     Returns a card dict with same keys as cards from the sheet.
@@ -61,23 +61,38 @@ def generate_new_word_card(llm) -> dict:
     system_prompt = """
     You are an Italian teacher.
     
-    Pick one single fairly common Italian word which is suitable for an advanced learner (roughly level B2).
+    Think of one random Italian word which is suitable for an advanced learner (roughly level B2). Be creative, think of something not necessarily common.
+    It can be a verb, an object, and even a short expression.
     Avoid proper names and extremely rare terms. 
     Provide:
-    - the Italian word (lemma)
-    - a simple translation in one language (preferably English, but French is also ok).
+    - the Italian word you thought of (lemma)
+    - a simple translation of that word in one language (preferably English, but French is also ok).
     You MUST respond ONLY as JSON describing the word, with keys "italian" and "translation".
     Do not include any extra text outside the JSON.
     """
 
-    result: NewWordCard = structured_llm.invoke(system_prompt)
+    for attempt in range(5):
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content="Generate one word now in JSON form.")
+        ]
+        result: NewWordCard = structured_llm.invoke(messages)
 
-    return {
-        "italian": result.italian.strip(),
-        "translation": result.translation.strip(),
-        "direction_it_to_other": random.choice([True, False]),
-        "is_generated": True,
-    }
+        italian_word = result.italian.strip()
+        key = italian_word.lower()
+
+        # If this Italian word hasn't been used yet, accept it
+        if key not in st.session_state.generated_italian:
+            st.session_state.generated_italian.add(key)
+            return {
+                "italian": italian_word,
+                "translation": result.translation.strip(),
+                "direction_it_to_other": random.choice([True, False]),
+                "is_generated": True,
+            }
+
+    # Fallback if we keep getting repeats: use a card from the sheet
+    return pick_random_card(df)
 
 
 def pick_random_card(df: pd.DataFrame):
@@ -99,20 +114,21 @@ def pick_any_card(df, base_llm):
     """
     Sometimes returns a sheet card, sometimes a generated one.
     """
-    # Example: probability 0.2 for a generated card
-    if random.random() < 0.2:
-        return generate_new_word_card(base_llm)
+    # probability for a generated card (from 0 to 1)
+    if random.random() < 0.3:
+        return generate_new_word_card(base_llm, df)
     else:
         return pick_random_card(df)
 
 
 def build_question(card: dict) -> str:
+    prefix = "⭐ NEW WORD " if card.get("is_generated") else ""
     if card["direction_it_to_other"]:
         # Show Italian, ask for translation
-        return f"Translate from Italian: **{card['italian']}**"
+        return f"{prefix}Translate from Italian: **{card['italian']}**"
     else:
         # Show translation, ask for Italian
-        return f"Traduci in italiano: **{card['translation']}**"
+        return f"{prefix}Traduci in italiano: **{card['translation']}**"
 
 
 def evaluate_answer(card: dict, student_answer: str) -> EvalResult:
@@ -219,10 +235,13 @@ def main():
     if "rounds" not in st.session_state:
         st.session_state.rounds = 0
 
+    if "generated_italian" not in st.session_state:
+        st.session_state.generated_italian = set()
+        
     col1, col2 = st.columns(2)
     with col1:
         if st.button("🎲 New word"):
-            base_llm = ChatOpenAI(model=MODEL_NAME, temperature=0.4)  # or reuse your existing getter
+            base_llm = ChatOpenAI(model=MODEL_NAME, temperature=0.7)  # or reuse your existing getter
             st.session_state.card = pick_any_card(df, base_llm)
             st.session_state.last_result = None
             st.session_state.student_answer = ""
