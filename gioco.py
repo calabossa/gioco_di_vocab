@@ -8,7 +8,7 @@ import random
 import pandas as pd
 import streamlit as st
 from langchain_openai import ChatOpenAI
-from langchain_core.pydantic_v1 import BaseModel
+from pydantic import BaseModel
 from langchain_core.messages import SystemMessage, HumanMessage
 from dotenv import load_dotenv
 import os
