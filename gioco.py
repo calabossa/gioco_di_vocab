@@ -47,6 +47,39 @@ def load_vocab():
     return df
 
 
+class NewWordCard(BaseModel):
+    italian: str
+    translation: str
+
+def generate_new_word_card(llm) -> dict:
+    """
+    Ask the LLM to invent one new intermediate-level Italian word with translation.
+    Returns a card dict with same keys as cards from the sheet.
+    """
+    structured_llm = llm.with_structured_output(NewWordCard, method="json_mode")
+
+    system_prompt = """
+    You are an Italian teacher.
+    
+    Pick one single fairly common Italian word which is suitable for an advanced learner (roughly level B2).
+    Avoid proper names and extremely rare terms. 
+    Provide:
+    - the Italian word (lemma)
+    - a simple translation in one language (preferably English, but French is also ok).
+    You MUST respond ONLY as JSON describing the word, with keys "italian" and "translation".
+    Do not include any extra text outside the JSON.
+    """
+
+    result: NewWordCard = structured_llm.invoke(system_prompt)
+
+    return {
+        "italian": result.italian.strip(),
+        "translation": result.translation.strip(),
+        "direction_it_to_other": random.choice([True, False]),
+        "is_generated": True,
+    }
+
+
 def pick_random_card(df: pd.DataFrame):
     row = df.sample(1).iloc[0]
     italian = str(row["italian"]).strip()
@@ -60,6 +93,17 @@ def pick_random_card(df: pd.DataFrame):
         "translation": translation,
         "direction_it_to_other": direction_it_to_other,
     }
+
+
+def pick_any_card(df, base_llm):
+    """
+    Sometimes returns a sheet card, sometimes a generated one.
+    """
+    # Example: probability 0.2 for a generated card
+    if random.random() < 0.2:
+        return generate_new_word_card(base_llm)
+    else:
+        return pick_random_card(df)
 
 
 def build_question(card: dict) -> str:
@@ -178,7 +222,8 @@ def main():
     col1, col2 = st.columns(2)
     with col1:
         if st.button("🎲 New word"):
-            st.session_state.card = pick_random_card(df)
+            base_llm = ChatOpenAI(model=MODEL_NAME, temperature=0.4)  # or reuse your existing getter
+            st.session_state.card = pick_any_card(df, base_llm)
             st.session_state.last_result = None
             st.session_state.student_answer = ""
 
