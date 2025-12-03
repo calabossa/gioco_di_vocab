@@ -51,7 +51,7 @@ class NewWordCard(BaseModel):
     italian: str
     translation: str
 
-def generate_new_word_card(llm, df) -> dict:
+def generate_new_word_card(llm, df, max_attempts=5) -> dict:
     """
     Ask the LLM to invent one new intermediate-level Italian word with translation.
     Returns a card dict with same keys as cards from the sheet.
@@ -71,7 +71,7 @@ def generate_new_word_card(llm, df) -> dict:
     Do not include any extra text outside the JSON.
     """
 
-    for attempt in range(5):
+    for _ in range(max_attempts):
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(content="Generate one word now in JSON form.")
@@ -81,9 +81,9 @@ def generate_new_word_card(llm, df) -> dict:
         italian_word = result.italian.strip()
         key = italian_word.lower()
 
-        # If this Italian word hasn't been used yet, accept it
-        if key not in st.session_state.generated_italian:
-            st.session_state.generated_italian.add(key)
+        # reject if already known (in sheet or previously generated this session)
+        if key not in st.session_state.seen_italian:
+            st.session_state.seen_italian.add(key)
             return {
                 "italian": italian_word,
                 "translation": result.translation.strip(),
@@ -91,7 +91,7 @@ def generate_new_word_card(llm, df) -> dict:
                 "is_generated": True,
             }
 
-    # Fallback if we keep getting repeats: use a card from the sheet
+    # fallback if we couldn't find a new word
     return pick_random_card(df)
 
 
@@ -186,7 +186,7 @@ def evaluate_answer(card: dict, student_answer: str) -> EvalResult:
     So the ONLY correct target language is Italian.
     
     Scoring:
-    - 3 = meaning correct AND student_answer is in Italian (allow small spelling mistakes, gender/article issues).
+    - 3 = meaning correct AND student_answer is in Italian (allow small spelling mistakes, gender/article issues). It is OK if articles are missing ("un", "una", "il", "la" etc.), they are not required.
     - 2 = partially correct (roughly right meaning but form is flawed, or student mixes a non-Italian word in).
     - 1 = incorrect, including cases where the meaning is OK but the answer is not in Italian.
     
@@ -225,6 +225,9 @@ def main():
 
 
     df = load_vocab()
+    # get all words i list for comparing with "new" 
+    if "seen_italian" not in st.session_state:
+        st.session_state.seen_italian = {w.strip().lower() for w in df["italian"]}
 
     if "card" not in st.session_state:
         st.session_state.card = None
