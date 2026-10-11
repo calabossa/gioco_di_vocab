@@ -61,7 +61,7 @@ def generate_new_word_card(llm, df, max_attempts=5) -> dict:
     system_prompt = """
     You are an Italian teacher.
     
-    Think of one random Italian word which is suitable for an advanced learner (roughly level B2). Be creative, think of something not necessarily common.
+    Think of one random Italian word which is suitable for an advanced learner (roughly level C1). Be creative, think of something not necessarily common.
     It can be a verb, an object, and even a short expression.
     Avoid proper names and extremely rare terms. 
     Provide:
@@ -115,7 +115,7 @@ def pick_any_card(df, base_llm):
     Sometimes returns a sheet card, sometimes a generated one.
     """
     # probability for a generated card (from 0 to 1)
-    if random.random() < 0.3:
+    if random.random() < 0.1:
         return generate_new_word_card(base_llm, df)
     else:
         return pick_random_card(df)
@@ -149,7 +149,8 @@ def evaluate_answer(card: dict, student_answer: str) -> EvalResult:
     
     The student was shown the ITALIAN word and asked to translate it.
     They are allowed to answer in ANY of these languages: English, French, or Hebrew.
-    You care about MEANING, not which of those three languages they choose.
+    You care about MEANING, not which of those three languages they choose. 
+    Articles should be ignored. For instance the translations "bed", "a bed" and "the bed" are all similar for you, the articles "a" and "the" should be ignored by you.
     
     Scoring:
     - 3 = meaning correct (or very close), in any of EN/FR/HE. Allow small spelling mistakes.
@@ -186,13 +187,12 @@ def evaluate_answer(card: dict, student_answer: str) -> EvalResult:
     So the ONLY correct target language is Italian.
     
     Scoring:
-    - 3 = meaning correct AND student_answer is in Italian (allow small spelling mistakes, gender/article issues). It is OK if articles are missing ("un", "una", "il", "la" etc.), they are not required.
-    - 2 = partially correct (roughly right meaning but form is flawed, or student mixes a non-Italian word in).
+    - 3 = meaning correct (allow small spelling mistakes, gender issues). Articles are not important and you should ignore them. For instance the translations "letto", "un letto" and "il letto" are all similar for you, the articles "un" and "il" should be ignored by you.
+    - 2 = partially correct (roughly right meaning but form is flawed or meaning is from the same general field but not truly correct).
     - 1 = incorrect, including cases where the meaning is OK but the answer is not in Italian.
     
     feedback:
     - One short sentence in English.
-    - If the answer is not Italian, say so explicitly.
     
     correct_answer_to_show:
     - Always the best clean Italian form, normally equal or very close to italian_word.
